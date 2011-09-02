@@ -12,6 +12,7 @@ import android.util.*;
 
 public class PdfActivity extends Activity
 {
+	private final String TAG = "PdfTab";
 	private final int currentPageTimeout = 2000;
 	private final int controlsTimeout = 8000;
 	private Handler handler = new Handler();
@@ -23,46 +24,23 @@ public class PdfActivity extends Activity
 	private Animation fadeIn;
 	private Animation fadeOut;
 
-	private PdfCore openFile()
-	{
-		String storageState = Environment.getExternalStorageState();
-		File path, file;
-		PdfCore core;
-
-		if(Environment.MEDIA_MOUNTED.equals(storageState))
-		{
-			System.out.println("Media mounted read/write");
-		}
-		else if(Environment.MEDIA_MOUNTED_READ_ONLY.equals(storageState))
-		{
-			System.out.println("Media mounted read only");
-		}
-		else
-		{
-			System.out.println("No media at all! Bale!\n");
-			return null;
-		}
-		path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-		file = new File(path, "test.pdf");
-		System.out.println("Trying to open "+file.toString());
-		try
-		{
-			core = new PdfCore(file.toString());
-		}
-		catch(Exception e)
-		{
-			System.out.println(e);
-			return null;
-		}
-		return core;
-	}
-
 	@Override public void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
 
-		if(core == null) { core = openFile(); }
-		if(core == null) { return; }
+		Intent intent = getIntent();
+		if(intent.getAction().equals(Intent.ACTION_VIEW))
+		{
+			onDestroy();
+
+			Log.v(TAG, "ACTION_VIEW");
+			Log.v(TAG, intent.getData().getPath());
+			core = openFile(intent.getData().getPath());
+		}
+		else
+		{
+			finish();
+		}
 
 		setContentView(R.layout.main);
 
@@ -79,6 +57,19 @@ public class PdfActivity extends Activity
 		seeker.setThumbOffset(18);
 		seeker.setOnSeekBarChangeListener(seekChangePage);
 		seeker.setMax(pdfView.getNumPages() - 1);
+	}
+
+	private PdfCore openFile(String path)
+	{
+		try
+		{
+			return new PdfCore(path);
+		}
+		catch(Exception e)
+		{
+			System.out.println(e);
+			return null;
+		}
 	}
 
 	Runnable showPageBadgeTask = new Runnable() {
@@ -134,6 +125,16 @@ public class PdfActivity extends Activity
 			currentpage.setVisibility(View.INVISIBLE);
 		}
 	};
+
+	public void onExit(View view)
+	{
+		finish();
+	}
+
+	public void onBackPressed()
+	{
+		pdfView.back();
+	}
 
 	public void showCurrentPage()
 	{

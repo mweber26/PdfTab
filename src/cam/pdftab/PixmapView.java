@@ -12,6 +12,7 @@ import android.view.animation.*;
 import android.widget.*;
 import java.net.*;
 import java.io.*;
+import java.util.*;
 
 public class PixmapView extends SurfaceView
 	implements SurfaceHolder.Callback, GestureDetector.OnGestureListener,
@@ -53,6 +54,11 @@ public class PixmapView extends SurfaceView
 	public int getNumPages()
 	{
 		return core.numPages;
+	}
+
+	public void back()
+	{
+		thread.back();
 	}
 
 	@Override public boolean onTouchEvent(final MotionEvent event)
@@ -145,16 +151,6 @@ public class PixmapView extends SurfaceView
 		return true;
 	}
 
-	public void changePage(int delta)
-	{
-		//thread.changePage(delta);
-	}
-
-	/* Handlers for SurfaceHolder callbacks; these are called when the
-	 * surface is created/destroyed/changed. We need to ensure that we only
-	 * draw into the surface between the created and destroyed calls.
-	 * Therefore, we start/stop the thread that actually runs MuPDF on
-	 * creation/destruction. */
 	public void surfaceCreated(SurfaceHolder holder)
 	{
 		thread = new PdfThread(holder, core);
@@ -201,6 +197,7 @@ public class PixmapView extends SurfaceView
 		private int pageTurnOffset;
 		private boolean pageTurnRight = false;
 		private int scrollingOffsetX = 0;
+		private java.util.Stack<Integer> stack = new java.util.Stack<Integer>();
 
 		public PdfThread(SurfaceHolder holder, PdfCore core)
 		{
@@ -215,6 +212,7 @@ public class PixmapView extends SurfaceView
 
 		public void setPage(int pageIndex)
 		{
+			stack.push(currentPage.getPageNum());
 			currentPage = new PdfPage(pageIndex);
 			prevPage = null;
 			nextPage = null;
@@ -230,6 +228,20 @@ public class PixmapView extends SurfaceView
 		public void redraw()
 		{
 			interrupt();
+		}
+
+		public void back()
+		{
+			if(stack.size() > 0)
+			{
+				int newPage = (int)stack.pop();
+
+				currentPage = new PdfPage(newPage);
+				prevPage = null;
+				nextPage = null;
+				redraw();
+				updateActivityCurrentPage();
+			}
 		}
 
 		private void updateActivityCurrentPage()
@@ -394,6 +406,7 @@ public class PixmapView extends SurfaceView
 								prevPage = null;
 							}
 
+							stack.push(prevPage.getPageNum());
 							updateActivityCurrentPage();
 						}
 						else
