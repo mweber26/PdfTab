@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="fill_parent"
+	android:layout_height="fill_parent"
+>
+	<FrameLayout
+		android:id="@+id/pdfview"
+		android:layout_width="fill_parent"
+		android:layout_height="fill_parent" />
+
+	<TextView
+		android:id="@+id/currentpage"
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:textColor="#fff"
+		android:layout_marginLeft="20dp"
+		android:layout_marginTop="20dp"
+		android:background="@drawable/bg_currentpage"
+		android:paddingLeft="24dp"
+		android:paddingRight="24dp"
+		android:paddingTop="12dp"
+		android:paddingBottom="12dp"
+		android:textSize="19sp"
+		android:textStyle="bold"
+		android:shadowColor="#000"
+		android:shadowDx="0"
+		android:shadowDy="-1"
+		android:shadowRadius="1"
+		android:layout_alignParentTop="true"
+		android:layout_alignParentLeft="true"
+		android:visibility="invisible" />
+
+	<RelativeLayout
+		android:id="@+id/controls"
+		android:layout_width="fill_parent"
+		android:layout_height="fill_parent"
+		android:visibility="invisible"
+	>
+		<SeekBar
+			android:id="@+id/pageseek"
+			android:layout_width="fill_parent"
+			android:layout_height="wrap_content"
+			android:layout_alignParentBottom="true"
+			android:paddingLeft="40dp"
+			android:paddingRight="40dp"
+			android:paddingBottom="0dp"
+			android:progressDrawable="@drawable/seekbar"
+			android:thumb="@drawable/seek_handle" />
+	</RelativeLayout>
+</RelativeLayout>

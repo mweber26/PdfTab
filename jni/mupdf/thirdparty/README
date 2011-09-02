@@ -1,0 +1,8 @@
+This archive contains the following versions of the software packages:
+
+	jbig2dec -- git checkout dated 2010-10-18 (c29b63...)
+	openjpeg -- version 1.4 from code.google.com/p/openjpeg
+	jpeg -- jpegsrc.v8c.tar.gz from www.ijg.org
+	zlib -- zlib-1.2.5.tar.gz from www.zlib.net
+	freetype -- freetype-2.4.4.tar.gz from freetype.org
+
