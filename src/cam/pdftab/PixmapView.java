@@ -25,16 +25,16 @@ public class PixmapView extends SurfaceView
 	private PdfActivity activity;
 	private SurfaceHolder holder;
 	private PdfThread thread = null;
-	private PdfCore core;
+	private PdfCore doc;
 	private boolean isScaling = false;
 	private int screenWidth, screenHeight;
 	private int threadInitialPage = 0;
 
-	public PixmapView(PdfActivity activity, PdfCore core)
+	public PixmapView(PdfActivity activity, PdfCore doc)
 	{
 		super(activity);
 
-		this.core = core;
+		this.doc = doc;
 		this.activity = activity;
 		this.gestureDetector = new GestureDetector(activity, this);
 		this.scaleGestureDetector = new ScaleGestureDetector(activity, this);
@@ -60,7 +60,7 @@ public class PixmapView extends SurfaceView
 
 	public int getNumPages()
 	{
-		return core.numPages;
+		return doc.numPages;
 	}
 
 	public void back()
@@ -188,7 +188,7 @@ public class PixmapView extends SurfaceView
 
 	public void surfaceCreated(SurfaceHolder holder)
 	{
-		thread = new PdfThread(holder, core);
+		thread = new PdfThread(holder);
 		thread.start();
 	}
 
@@ -228,8 +228,7 @@ public class PixmapView extends SurfaceView
 		private SurfaceHolder holder;
 		private boolean running = false;
 		private int screenWidth, screenHeight;
-		private PdfCore core;
-		private PdfPage currentPage, nextPage, prevPage;
+		private PdfPageLayout currentPage, nextPage, prevPage;
 		private boolean isWaiting = false;
 		private long pageTurnAnimationStart = -1;
 		private int pageTurnOffset;
@@ -237,23 +236,20 @@ public class PixmapView extends SurfaceView
 		private int scrollingOffsetX = 0;
 		private java.util.Stack<Integer> stack = new java.util.Stack<Integer>();
 
-		public PdfThread(SurfaceHolder holder, PdfCore core)
+		public PdfThread(SurfaceHolder holder)
 		{
 			running = true;
 			this.holder = holder;
-			this.core = core;
 			this.scroller = new OverScroller(activity);
 		}
 
 		public OverScroller getScroller() { return scroller; }
 		public int getCurrentPage() { return currentPage.getPageNum() + 1; }
-		public int getPageOffsetX() { return currentPage.pageOriginX; }
-		public int getPageOffsetY() { return currentPage.pageOriginY; }
 
 		public void setPage(int pageIndex)
 		{
 			stack.push(currentPage.getPageNum());
-			currentPage = new PdfPage(pageIndex);
+			currentPage = new PdfPageLayout(pageIndex);
 			prevPage = null;
 			nextPage = null;
 			redraw();
@@ -276,7 +272,7 @@ public class PixmapView extends SurfaceView
 			{
 				int newPage = (int)stack.pop();
 
-				currentPage = new PdfPage(newPage);
+				currentPage = new PdfPageLayout(newPage);
 				prevPage = null;
 				nextPage = null;
 				redraw();
@@ -291,7 +287,7 @@ public class PixmapView extends SurfaceView
 
 		public void changePage(int pageNum)
 		{
-			currentPage = new PdfPage(pageNum);
+			currentPage = new PdfPageLayout(pageNum);
 			prevPage = null;
 			nextPage = null;
 			redraw();
@@ -304,20 +300,20 @@ public class PixmapView extends SurfaceView
 			this.screenHeight = height;
 
 			if(currentPage != null)
-				currentPage.init();
+				currentPage.setScreenSize(width, height);
 			redraw();
 		}
 
 		public void springBack()
 		{
-			if(!isAnimating())
-				currentPage.springBack();
+			//if(!isAnimating())
+				//currentPage.springBack();
 		}
 
 		public void scroll(float distanceX, float distanceY)
 		{
-			if(!isAnimating())
-				currentPage.scroll(distanceX, distanceY);
+			//if(!isAnimating())
+				//currentPage.scroll(distanceX, distanceY);
 		}
 
 		public void fling(float velocityX, float velocityY)
@@ -325,13 +321,28 @@ public class PixmapView extends SurfaceView
 			//only fling if we aren't already moving
 			if(!isAnimating())
 			{
-				Log.d(TAG, "fling(): "+velocityX+","+velocityY);
+				verticalFlingSinglePage(velocityY);
 
 				//if(Math.abs(velocityX) > Math.abs(velocityY))
 					//currentPage.pageTurn(velocityX);
 				//else
-					currentPage.fling(velocityX, velocityY);
+					//currentPage.fling(velocityX, velocityY);
 			}
+		}
+
+		private void verticalFlingSinglePage(float velocityY)
+		{
+			if(screenHeight >= currentPage.getPageHeight() && screenWidth >= currentPage.getPageWidth())
+				return;
+
+			Log.d(TAG, "verticalFlingSinglePage(" + velocityY + ")");
+			scroller.fling(
+				currentPage.offsetX, currentPage.offsetY,
+				0, -(int)(velocityY * 1.25),
+				0, 0,
+				0, currentPage.getPageHeight() - screenHeight,
+				0, 50);
+			redraw();
 		}
 
 		private void startPageTurnAnimation()
@@ -358,7 +369,7 @@ public class PixmapView extends SurfaceView
 				{
 					changePage(pageLink);
 				}
-				else if(x >= screenWidth - screenWidth / 4 && currentPage.getPageNum() < core.numPages)
+				else if(x >= screenWidth - screenWidth / 4 && currentPage.getPageNum() < doc.numPages)
 				{
 					startPageTurnAnimation();
 					pageTurnRight = true;
@@ -375,37 +386,6 @@ public class PixmapView extends SurfaceView
 				}
 			}
 		}
-
-		/*public void setPageScaleTo(float scale, PointF midpoint)
-		{
-			float x, y;
-			//Convert midpoint (in screen coords) to page coords
-			x = (midpoint.x - pageOriginX) / pageScale;
-			y = (midpoint.y - pageOriginY) / pageScale;
-			//Find new scaled page sizes
-			synchronized(this)
-			{
-				pageWidth = (int)(core.pageWidth * scale + 0.5);
-				if(pageWidth < screenWidth / 2)
-				{
-					scale = screenWidth / 2 / core.pageWidth;
-					pageWidth = (int)(core.pageWidth * scale + 0.5);
-				}
-				pageHeight = (int)(core.pageHeight*scale+0.5);
-				if(pageHeight < screenHeight / 2)
-				{
-					scale = screenHeight / 2 / core.pageHeight;
-					pageWidth = (int)(core.pageWidth *scale+0.5);
-					pageHeight = (int)(core.pageHeight*scale+0.5);
-				}
-				pageScale = scale;
-				// Now given this new scale, calculate page origins so that x and y are at midpoint
-				float xscale = (float)pageWidth /core.pageWidth;
-				float yscale = (float)pageHeight/core.pageHeight;
-				setPageOriginTo((int)(midpoint.x - x*xscale + 0.5),
-						(int)(midpoint.y - y*yscale + 0.5));
-			}
-		}*/
 
 		public void run()
 		{
@@ -443,7 +423,7 @@ public class PixmapView extends SurfaceView
 							}
 							else
 							{
-								PdfPage p = currentPage;
+								PdfPageLayout p = currentPage;
 								currentPage = prevPage;
 								nextPage = p;
 								prevPage = null;
@@ -466,7 +446,7 @@ public class PixmapView extends SurfaceView
 							if(scroller.computeScrollOffset())
 							{
 								scrollingOffsetX = scroller.getCurrX();
-								currentPage.updateScrollPosition(scroller);
+								currentPage.offsetY = scroller.getCurrY();
 							}
 							else
 							{
@@ -485,10 +465,11 @@ public class PixmapView extends SurfaceView
 
 				if(doSleep)
 				{
-					if(nextPage == null && currentPage.getPageNum() < core.numPages)
-						nextPage = new PdfPage(currentPage.getPageNum() + 1);
+					if(nextPage == null && currentPage.getPageNum() < doc.numPages)
+						nextPage = new PdfPageLayout(currentPage.getPageNum() + 1);
+					
 					if(prevPage == null && currentPage.getPageNum() > 0)
-						prevPage = new PdfPage(currentPage.getPageNum() - 1);
+						prevPage = new PdfPageLayout(currentPage.getPageNum() - 1);
 
 					try { sleep(3600000); }
 					catch(Exception e) { }
@@ -513,7 +494,7 @@ public class PixmapView extends SurfaceView
 			}
 			else if(scrollingOffsetX != 0)
 			{
-				if(scrollingOffsetX > 0)
+				/*if(scrollingOffsetX > 0)
 				{
 					currentPage.blit(c, -scrollingOffsetX);
 					nextPage.blit(c, screenWidth - scrollingOffsetX + pageTurnSpacing);
@@ -531,258 +512,27 @@ public class PixmapView extends SurfaceView
 					pageTurnRight = scrollingOffsetX > 0;
 					startPageTurnAnimation();
 					scrollingOffsetX = 0;
-				}
+				}*/
 			}
 			else
 			{
-				currentPage.blit(c);
+				currentPage.blit(c, 0);
 			}
 		}
-		
-		public class PdfPage
+
+		private class PdfPageLayout extends PdfPage
 		{
-			private int[] pixelBuffer;
-			private int pageWidth, pageHeight;
-			private float screenScale;
-			private float pageScale;
-			private int pageNum;
-			public int pageOriginX, pageOriginY;
-			private int cropLineTop, cropLineLeft, cropLineRight, cropLineBottom;
+			public int offsetX, offsetY;
 
-			public PdfPage(int pageNum)
+			public PdfPageLayout(int pageNum)
 			{
-				this.pageNum = pageNum;
-				init();
+				super(activity, doc, pageNum);
+				setScreenSize(screenWidth, screenHeight);
 			}
 
-			private int getPageWidth() { return cropLineRight - cropLineLeft; }
-			private int getPageHeight() { return cropLineBottom - cropLineTop; }
-
-			public void init()
+			public void blit(Canvas c, int startX)
 			{
-				core.gotoPage(pageNum);
-
-				SharedPreferences settings = activity.getSharedPreferences("pdf_files",
-					Activity.MODE_PRIVATE);
-				cropLineLeft = settings.getInt("crop:" + core.path + ":left", 0);
-				cropLineTop = settings.getInt("crop:" + core.path + ":top", 0);
-				cropLineRight = settings.getInt("crop:" + core.path + ":right",
-					(int)core.pageWidth);
-				cropLineBottom = settings.getInt("crop:" + core.path + ":bottom",
-					(int)core.pageHeight);
-
-				Log.v(TAG, "screenWidth = " + screenWidth);
-				Log.v(TAG, "screenHeight = " + screenHeight);
-				Log.v(TAG, "pageWidth = " + core.pageWidth);
-				Log.v(TAG, "pageHeight = " + core.pageHeight);
-				Log.v(TAG, "cropLineTop = " + cropLineTop);
-				Log.v(TAG, "cropLineLeft = " + cropLineLeft);
-				Log.v(TAG, "cropLineBottom = " + cropLineBottom);
-				Log.v(TAG, "cropLineRight = " + cropLineRight);
-				Log.v(TAG, "cropWidth = " + getPageWidth());
-				Log.v(TAG, "cropHeight = " + getPageHeight());
-
-				float screenScaleX = (float)screenWidth / getPageWidth();
-				float screenScaleY = (float)screenHeight / getPageHeight();
-
-				if(screenWidth < screenHeight)
-				{
-					if(screenScaleX < screenScaleY)
-					{
-						pageScale = (float)core.pageWidth / getPageWidth();
-						screenScale = screenScaleX;
-					}
-					else
-					{
-						pageScale = (float)core.pageHeight / getPageHeight();
-						screenScale = screenScaleY;
-					}
-				}
-				else
-				{
-					pageScale = (float)core.pageWidth / getPageWidth();
-					screenScale = screenScaleX;
-				}
-
-				Log.v(TAG, "pageScale = " + pageScale);
-				Log.v(TAG, "screenScale = " + screenScale);
- 
-				pageWidth = (int)(getPageWidth() * screenScale + 0.5);
-				pageHeight = (int)(getPageHeight() * screenScale + 0.5);
-
-				pageOriginX = -(screenWidth - pageWidth) / 2;
-				pageOriginY = -(screenHeight - pageHeight) / 2;
-
-				//if we have a scrolling height then we want to start at the top of the page
-				if(pageHeight > screenHeight)
-					pageOriginY = 0;
-
-				renderPage();
-			}
-
-			public void prepareForPageTurn(PdfPage currentPage)
-			{
-				pageOriginX = currentPage.pageOriginX;
-				pageOriginY = scrollMinY();
-			}
-
-			private void renderPage()
-			{
-				int size = pageWidth * pageHeight;
-				if(pixelBuffer == null || pixelBuffer.length != size)
-				{
-					//pixelBuffer = core.renderPage(
-						//(int)(core.pageWidth * pageScale), (int)(core.pageHeight * pageScale),
-						//(int)(cropLineLeft * pageScale), (int)(cropLineTop * pageScale),
-						//pageWidth, pageHeight);
-					pixelBuffer = core.renderPage(
-						(int)(core.pageWidth * screenScale), (int)(core.pageHeight * screenScale),
-						(int)(cropLineLeft * screenScale), (int)(cropLineTop * screenScale),
-						pageWidth, pageHeight);
-				}
-			}
-
-			public int findLink(int x, int y)
-			{
-				return core.findLink(pageNum,
-					pageWidth, pageHeight,
-					(int)(cropLineLeft * screenScale), (int)(cropLineTop * screenScale),
-					pageWidth, pageHeight,
-					x - pageOriginX, y + pageOriginY);
-			}
-
-			public int getPageNum() { return pageNum; }
-
-			public boolean updateScrollPosition(OverScroller scroller)
-			{
-				pageOriginY = scroller.getCurrY();
-				return true;
-			}
-
-			private int scrollMinX()
-			{
-				if(screenWidth == pageWidth)
-					return 0;
-				else
-					return pageOriginX;
-			}
-
-			private int scrollMaxX()
-			{
-				if(screenWidth == pageWidth)
-					return 0;
-				else
-					return pageOriginX;
-			}
-
-			private int scrollMinY()
-			{
-				if(screenHeight > screenWidth) //portrait
-					return -(screenHeight - pageHeight) / 2;
-				else
-					return 0;
-			}
-
-			private int scrollMaxY()
-			{
-				if(screenHeight > screenWidth) //portrait
-					return -(screenHeight - pageHeight) / 2;
-				else
-					return pageHeight - screenHeight;
-			}
-
-			public void springBack()
-			{
-				if(screenHeight >= pageHeight && screenWidth >= pageWidth)
-					return;
-
-				getScroller().springBack(
-					pageOriginX, pageOriginY,
-					scrollMinX(), scrollMaxX(),
-					scrollMinY(), scrollMaxY());
-				redraw();
-			}
-
-			public void scroll(float distanceX, float distanceY)
-			{
-				if(screenHeight >= pageHeight && screenWidth >= pageWidth)
-					return;
-
-				//pageOriginX += (int)distanceX;
-				pageOriginY += (int)distanceY;
-				redraw();
-			}
-
-			public void pageTurn(float velocityX)
-			{
-				thread.getScroller().fling(
-					pageOriginX, pageOriginY,
-					-(int)(velocityX * 1.25), 0,
-					0, 0,
-					scrollMinY(), scrollMaxY(),
-					pageWidth/3, 0);
-				redraw();
-			}
-
-			public void fling(float velocityX, float velocityY)
-			{
-				if(screenHeight >= pageHeight && screenWidth >= pageWidth)
-					return;
-
-				thread.getScroller().fling(
-					pageOriginX, pageOriginY,
-					-(int)(velocityX * 1.25), -(int)(velocityY * 1.15),
-					scrollMinX(), scrollMaxX(),
-					scrollMinY(), scrollMaxY(),
-					0, 50);
-				redraw();
-			}
-
-			public void blit(Canvas c)
-			{
-				blit(c, 0);
-			}
-
-			private void blit(Canvas c, int startX)
-			{
-				if(pixelBuffer == null)
-					return;
-
-				int patchX = -pageOriginX;
-				int patchY = -pageOriginY;
-				int blitW = screenWidth;
-				int blitH = screenHeight;
-				int offset = 0;
-
-				if(screenHeight > screenWidth) //portrait
-				{
-					if(blitW > pageWidth) blitW = pageWidth;
-					if(blitH > pageHeight) blitH = pageHeight;
-				}
-				else
-				{
-					if(patchY < 0)
-					{
-						offset = pageOriginY * pageWidth;
-						patchY = 0;
-
-						//due to overscroll we may not actually have enough page for this offset
-						if(blitH + pageOriginY > pageHeight)
-							blitH = pageHeight - pageOriginY;
-					}
-
-
-					//we have maximized the width with the renderPage, but the page could be
-					//	smaller than the screen
-					if(blitH > pageHeight)
-						blitH = pageHeight;
-				}
-
-				c.drawBitmap(pixelBuffer,
-					offset, pageWidth,
-					patchX + startX, patchY,
-					blitW, blitH,
-					false, (Paint)null);
+				super.blit(c, offsetX + startX, -offsetY);
 			}
 		}
 	}
