@@ -214,6 +214,7 @@ JNIEXPORT jboolean JNICALL Java_cam_pdftab_PdfCore_drawPage(JNIEnv *env, jobject
 	yscale = (float)pageH / (float)(bbox.y1 - bbox.y0);
 	ctm = fz_concat(ctm, fz_scale(xscale, yscale));
 	bbox = fz_round_rect(fz_transform_rect(ctm, currentMediabox));
+	LOGE("Rendering scale=%fx%f", xscale, yscale);
 
 	dev = fz_new_draw_device(glyphcache, pix);
 	fz_execute_display_list(currentPageList, dev, ctm, bbox);
@@ -228,10 +229,12 @@ JNIEXPORT jboolean JNICALL Java_cam_pdftab_PdfCore_drawPage(JNIEnv *env, jobject
 
 JNIEXPORT void JNICALL Java_cam_pdftab_PdfCore_destroying(JNIEnv *env, jobject thiz)
 {
+	LOGE("PdfCore.destroy");
 	fz_free_display_list(currentPageList);
 	currentPageList = NULL;
 	pdf_free_xref(xref);
 	xref = NULL;
 	fz_free_glyph_cache(glyphcache);
 	glyphcache = NULL;
+	LOGE("PdfCore.destroyed");
 }

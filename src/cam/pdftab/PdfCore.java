@@ -9,12 +9,13 @@ public class PdfCore
 	public int numPages;
 	public float pageWidth;
 	public float pageHeight;
+	public final String path;
 
 	private static native int openFile(String filename);
 	private static native void gotoPageInternal(int localActionPageNum);
 	private static native float getPageWidth();
 	private static native float getPageHeight();
-	public static native void drawPage(int[] pixels,
+	private static native void drawPage(int[] pixels,
 		int pageW, int pageH,
 		int patchX, int patchY,
 		int patchW, int patchH);
@@ -27,10 +28,22 @@ public class PdfCore
 
 	public PdfCore(String filename) throws Exception
 	{
+		path = filename;
 		numPages = openFile(filename);
 		if(numPages <= 0)
 			throw new Exception("Failed to open " + filename);
 		pageNum = 0;
+	}
+
+	public static int[] renderPage(
+		int pageW, int pageH,
+		int patchX, int patchY,
+		int patchW, int patchH)
+	{
+		System.gc();
+		int[] ret = new int[patchW * patchH];
+		drawPage(ret, pageW, pageH, patchX, patchY, patchW, patchH);
+		return ret;
 	}
 
 	public void gotoPage(int page)

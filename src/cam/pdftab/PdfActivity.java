@@ -12,17 +12,24 @@ import android.util.*;
 
 public class PdfActivity extends Activity
 {
+	private static final int CROP_RESPONSE = 1;
+
 	private final String TAG = "PdfTab";
 	private final int currentPageTimeout = 2000;
 	private final int controlsTimeout = 8000;
+	private static PdfCore core;
 	private Handler handler = new Handler();
-	private PdfCore core;
 	private PixmapView pdfView;
 	private TextView currentpage;
 	private SeekBar seeker;
 	private View controls;
 	private Animation fadeIn;
 	private Animation fadeOut;
+
+	public static PdfCore getPdfCore()
+	{
+		return core;
+	}
 
 	@Override public void onCreate(Bundle savedInstanceState)
 	{
@@ -31,7 +38,18 @@ public class PdfActivity extends Activity
 		Intent intent = getIntent();
 		if(intent.getAction().equals(Intent.ACTION_VIEW))
 		{
-			onDestroy();
+ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+activityManager.getMemoryInfo(mi);
+Log.i("memory free", "" + mi.availMem);
+
+			if(core != null)
+			{
+				Log.v(TAG, "reset core for new file");
+				core.onDestroy();
+				core = null;
+				pdfView = null;
+			}
 
 			Log.v(TAG, "ACTION_VIEW");
 			Log.v(TAG, intent.getData().getPath());
@@ -57,6 +75,25 @@ public class PdfActivity extends Activity
 		seeker.setThumbOffset(18);
 		seeker.setOnSeekBarChangeListener(seekChangePage);
 		seeker.setMax(pdfView.getNumPages() - 1);
+	}
+
+	public void onPause()
+	{
+		super.onPause();
+
+		SharedPreferences settings = getPreferences(Activity.MODE_PRIVATE);
+		settings.edit().putInt("pdf_page:" + core.path, pdfView.getPage() - 1).commit();
+		Log.v(TAG, "onPause(page=" + (pdfView.getPage() - 1) + ")");
+	}
+
+	public void onResume()
+	{
+		super.onResume();
+
+		SharedPreferences settings = getPreferences(Activity.MODE_PRIVATE);
+		int restorePage = settings.getInt("pdf_page:" + core.path, 0);
+		Log.v(TAG, "onResume(page=" + restorePage + ")");
+		pdfView.setPage(restorePage);
 	}
 
 	private PdfCore openFile(String path)
@@ -131,6 +168,26 @@ public class PdfActivity extends Activity
 		finish();
 	}
 
+	public void onCrop(View view)
+	{
+		Intent intent = new Intent(this, CropActivity.class);
+		intent.putExtra("pageIndex", pdfView.getPage() - 1);
+		startActivityForResult(intent, CROP_RESPONSE);
+	}
+
+	private void onCropFinish()
+	{
+		Log.v(TAG, "onCropFinish");
+		handler.removeCallbacks(showControlsTask);
+		handler.removeCallbacks(hideControlsTask);
+		controls.setVisibility(View.INVISIBLE);
+	}
+
+	protected void onActivityResult(int requestCode, int resultCode, Intent data)
+	{
+		if(requestCode == CROP_RESPONSE) onCropFinish();
+	}
+
 	public void onBackPressed()
 	{
 		pdfView.back();
@@ -162,6 +219,11 @@ public class PdfActivity extends Activity
 		handler.postDelayed(hideControlsTask, controlsTimeout);
 	}
 
+	public boolean canAcceptPageActions()
+	{
+		return true;
+	}
+
 	private SeekBar.OnSeekBarChangeListener seekChangePage = new SeekBar.OnSeekBarChangeListener() {
 		public void onProgressChanged(SeekBar s, int progress, boolean touch) {
 			if(touch)
@@ -190,9 +252,11 @@ public class PdfActivity extends Activity
 
 	public void onDestroy()
 	{
+		Log.v(TAG, "onDestroy");
 		if(core != null)
 			core.onDestroy();
 		core = null;
+		pdfView = null;
 		super.onDestroy();
 	}
 }

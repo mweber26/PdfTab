@@ -34,7 +34,7 @@ public class FilesActivity extends ListActivity
 
 	public void onBackPressed()
 	{
-		if(currentRoot.getPath() == root.getPath())
+		if(currentRoot.equals(root))
 			return;
 
 		currentRoot = currentRoot.getParentFile();

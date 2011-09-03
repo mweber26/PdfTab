@@ -6,6 +6,7 @@ import android.os.*;
 import android.content.*;
 import android.content.res.*;
 import android.graphics.*;
+import android.graphics.drawable.*;
 import android.util.*;
 import android.view.*;
 import android.view.animation.*;
@@ -27,6 +28,7 @@ public class PixmapView extends SurfaceView
 	private PdfCore core;
 	private boolean isScaling = false;
 	private int screenWidth, screenHeight;
+	private int threadInitialPage = 0;
 
 	public PixmapView(PdfActivity activity, PdfCore core)
 	{
@@ -36,6 +38,7 @@ public class PixmapView extends SurfaceView
 		this.activity = activity;
 		this.gestureDetector = new GestureDetector(activity, this);
 		this.scaleGestureDetector = new ScaleGestureDetector(activity, this);
+
 		holder = getHolder();
 		holder.addCallback(this);
 		setFocusable(true);
@@ -43,7 +46,11 @@ public class PixmapView extends SurfaceView
 
 	public void setPage(int pageIndex)
 	{
-		thread.setPage(pageIndex);
+		Log.v(TAG, "setPage(" + pageIndex + ")");
+		if(thread == null)
+			threadInitialPage = pageIndex;
+		else
+			thread.setPage(pageIndex);
 	}
 
 	public int getPage()
@@ -63,6 +70,9 @@ public class PixmapView extends SurfaceView
 
 	@Override public boolean onTouchEvent(final MotionEvent event)
 	{
+		if(!activity.canAcceptPageActions())
+			return false;
+
 		switch(event.getAction() & MotionEvent.ACTION_MASK)
 		{
 			case MotionEvent.ACTION_UP:
@@ -97,6 +107,9 @@ public class PixmapView extends SurfaceView
 
 	@Override public boolean onScaleBegin(ScaleGestureDetector detector)
 	{
+		if(!activity.canAcceptPageActions())
+			return false;
+
 		Log.d(TAG, "onScaleBegin()");
 		isScaling = true;
 		return true;
@@ -104,19 +117,28 @@ public class PixmapView extends SurfaceView
 
 	@Override public boolean onScale(ScaleGestureDetector detector)
 	{
+		if(!activity.canAcceptPageActions())
+			return false;
+
 		Log.d(TAG, "onScale()");
 		return true;
 	}
 
 	@Override public void onScaleEnd(ScaleGestureDetector detector)
 	{
+		if(!activity.canAcceptPageActions())
+			return;
+
 		Log.d(TAG, "onScaleEnd()");
 		isScaling = false;
 	}
 
 	@Override public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY)
 	{
-		if(isScaling) return false;
+		if(!activity.canAcceptPageActions())
+			return false;
+		if(isScaling)
+			return false;
 
 		thread.fling(velocityX, velocityY);
 		return true;
@@ -124,14 +146,20 @@ public class PixmapView extends SurfaceView
 
 	@Override public void onLongPress(MotionEvent e)
 	{
-		if(isScaling) return;
+		if(!activity.canAcceptPageActions())
+			return;
+		if(isScaling)
+			return;
 
 		Log.d(TAG, "onLongPress(): ignoring!");
 	}
 
 	@Override public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY)
 	{
-		if(isScaling) return false;
+		if(!activity.canAcceptPageActions())
+			return false;
+		if(isScaling)
+			return false;
 
 		thread.scroll(distanceX, distanceY);
 		return true;
@@ -139,14 +167,21 @@ public class PixmapView extends SurfaceView
 
 	@Override public void onShowPress(MotionEvent e)
 	{
-		if(isScaling) return;
+		if(!activity.canAcceptPageActions())
+			return;
+		if(isScaling)
+			return;
 
 		Log.d(TAG, "onShowPress(): ignoring!");
 	}
 
 	@Override public boolean onSingleTapUp(MotionEvent e)
 	{
-		if(isScaling) return false;
+		if(!activity.canAcceptPageActions())
+			return false;
+		if(isScaling)
+			return false;
+
 		thread.onTap(e.getX(), e.getY());
 		return true;
 	}
@@ -180,6 +215,9 @@ public class PixmapView extends SurfaceView
 			{
 			}
 		}
+
+		thread = null;
+		Log.v(TAG, "surfaceDestroyed");
 	}
 
 	class PdfThread extends Thread
@@ -209,6 +247,8 @@ public class PixmapView extends SurfaceView
 
 		public OverScroller getScroller() { return scroller; }
 		public int getCurrentPage() { return currentPage.getPageNum() + 1; }
+		public int getPageOffsetX() { return currentPage.pageOriginX; }
+		public int getPageOffsetY() { return currentPage.pageOriginY; }
 
 		public void setPage(int pageIndex)
 		{
@@ -369,7 +409,7 @@ public class PixmapView extends SurfaceView
 
 		public void run()
 		{
-			changePage(0);
+			changePage(threadInitialPage);
 
 			while(running)
 			{
@@ -392,6 +432,9 @@ public class PixmapView extends SurfaceView
 						{
 							scrollingOffsetX = 0;
 							pageTurnAnimationStart = -1;
+
+							stack.push(currentPage.getPageNum());
+
 							if(pageTurnRight)
 							{
 								prevPage = currentPage;
@@ -406,7 +449,6 @@ public class PixmapView extends SurfaceView
 								prevPage = null;
 							}
 
-							stack.push(prevPage.getPageNum());
 							updateActivityCurrentPage();
 						}
 						else
@@ -433,7 +475,7 @@ public class PixmapView extends SurfaceView
 						}
 					}
 
-					doDraw(c);
+					drawPage(c);
 				}
 				finally
 				{
@@ -454,7 +496,7 @@ public class PixmapView extends SurfaceView
 			}
 		}
 
-		protected void doDraw(Canvas c)
+		protected void drawPage(Canvas c)
 		{
 			if(pageTurnAnimationStart > 0)
 			{
@@ -501,9 +543,11 @@ public class PixmapView extends SurfaceView
 		{
 			private int[] pixelBuffer;
 			private int pageWidth, pageHeight;
+			private float screenScale;
 			private float pageScale;
 			private int pageNum;
-			private int pageOriginX, pageOriginY;
+			public int pageOriginX, pageOriginY;
+			private int cropLineTop, cropLineLeft, cropLineRight, cropLineBottom;
 
 			public PdfPage(int pageNum)
 			{
@@ -511,14 +555,60 @@ public class PixmapView extends SurfaceView
 				init();
 			}
 
+			private int getPageWidth() { return cropLineRight - cropLineLeft; }
+			private int getPageHeight() { return cropLineBottom - cropLineTop; }
+
 			public void init()
 			{
 				core.gotoPage(pageNum);
 
-				pageScale = (float)screenWidth / core.pageWidth;
+				SharedPreferences settings = activity.getSharedPreferences("pdf_files",
+					Activity.MODE_PRIVATE);
+				cropLineLeft = settings.getInt("crop:" + core.path + ":left", 0);
+				cropLineTop = settings.getInt("crop:" + core.path + ":top", 0);
+				cropLineRight = settings.getInt("crop:" + core.path + ":right",
+					(int)core.pageWidth);
+				cropLineBottom = settings.getInt("crop:" + core.path + ":bottom",
+					(int)core.pageHeight);
+
+				Log.v(TAG, "screenWidth = " + screenWidth);
+				Log.v(TAG, "screenHeight = " + screenHeight);
+				Log.v(TAG, "pageWidth = " + core.pageWidth);
+				Log.v(TAG, "pageHeight = " + core.pageHeight);
+				Log.v(TAG, "cropLineTop = " + cropLineTop);
+				Log.v(TAG, "cropLineLeft = " + cropLineLeft);
+				Log.v(TAG, "cropLineBottom = " + cropLineBottom);
+				Log.v(TAG, "cropLineRight = " + cropLineRight);
+				Log.v(TAG, "cropWidth = " + getPageWidth());
+				Log.v(TAG, "cropHeight = " + getPageHeight());
+
+				float screenScaleX = (float)screenWidth / getPageWidth();
+				float screenScaleY = (float)screenHeight / getPageHeight();
+
+				if(screenWidth < screenHeight)
+				{
+					if(screenScaleX < screenScaleY)
+					{
+						pageScale = (float)core.pageWidth / getPageWidth();
+						screenScale = screenScaleX;
+					}
+					else
+					{
+						pageScale = (float)core.pageHeight / getPageHeight();
+						screenScale = screenScaleY;
+					}
+				}
+				else
+				{
+					pageScale = (float)core.pageWidth / getPageWidth();
+					screenScale = screenScaleX;
+				}
+
+				Log.v(TAG, "pageScale = " + pageScale);
+				Log.v(TAG, "screenScale = " + screenScale);
  
-				pageWidth = (int)(core.pageWidth * pageScale + 0.5);
-				pageHeight = (int)(core.pageHeight * pageScale + 0.5);
+				pageWidth = (int)(getPageWidth() * screenScale + 0.5);
+				pageHeight = (int)(getPageHeight() * screenScale + 0.5);
 
 				pageOriginX = -(screenWidth - pageWidth) / 2;
 				pageOriginY = -(screenHeight - pageHeight) / 2;
@@ -541,10 +631,13 @@ public class PixmapView extends SurfaceView
 				int size = pageWidth * pageHeight;
 				if(pixelBuffer == null || pixelBuffer.length != size)
 				{
-					pixelBuffer = new int[size];
-					core.drawPage(pixelBuffer,
-						pageWidth, pageHeight,
-						0, 0,
+					//pixelBuffer = core.renderPage(
+						//(int)(core.pageWidth * pageScale), (int)(core.pageHeight * pageScale),
+						//(int)(cropLineLeft * pageScale), (int)(cropLineTop * pageScale),
+						//pageWidth, pageHeight);
+					pixelBuffer = core.renderPage(
+						(int)(core.pageWidth * screenScale), (int)(core.pageHeight * screenScale),
+						(int)(cropLineLeft * screenScale), (int)(cropLineTop * screenScale),
 						pageWidth, pageHeight);
 				}
 			}
@@ -553,7 +646,7 @@ public class PixmapView extends SurfaceView
 			{
 				return core.findLink(pageNum,
 					pageWidth, pageHeight,
-					0, 0,
+					(int)(cropLineLeft * screenScale), (int)(cropLineTop * screenScale),
 					pageWidth, pageHeight,
 					x - pageOriginX, y + pageOriginY);
 			}
@@ -566,8 +659,21 @@ public class PixmapView extends SurfaceView
 				return true;
 			}
 
-			private int scrollMinX() { return 0; }
-			private int scrollMaxX() { return 0; }
+			private int scrollMinX()
+			{
+				if(screenWidth == pageWidth)
+					return 0;
+				else
+					return pageOriginX;
+			}
+
+			private int scrollMaxX()
+			{
+				if(screenWidth == pageWidth)
+					return 0;
+				else
+					return pageOriginX;
+			}
 
 			private int scrollMinY()
 			{
@@ -587,6 +693,9 @@ public class PixmapView extends SurfaceView
 
 			public void springBack()
 			{
+				if(screenHeight >= pageHeight && screenWidth >= pageWidth)
+					return;
+
 				getScroller().springBack(
 					pageOriginX, pageOriginY,
 					scrollMinX(), scrollMaxX(),
@@ -596,6 +705,9 @@ public class PixmapView extends SurfaceView
 
 			public void scroll(float distanceX, float distanceY)
 			{
+				if(screenHeight >= pageHeight && screenWidth >= pageWidth)
+					return;
+
 				//pageOriginX += (int)distanceX;
 				pageOriginY += (int)distanceY;
 				redraw();
@@ -614,6 +726,9 @@ public class PixmapView extends SurfaceView
 
 			public void fling(float velocityX, float velocityY)
 			{
+				if(screenHeight >= pageHeight && screenWidth >= pageWidth)
+					return;
+
 				thread.getScroller().fling(
 					pageOriginX, pageOriginY,
 					-(int)(velocityX * 1.25), -(int)(velocityY * 1.15),
@@ -650,18 +765,18 @@ public class PixmapView extends SurfaceView
 					{
 						offset = pageOriginY * pageWidth;
 						patchY = 0;
+
+						//due to overscroll we may not actually have enough page for this offset
 						if(blitH + pageOriginY > pageHeight)
 							blitH = pageHeight - pageOriginY;
 					}
 
-					//if(startX < 0)
-						//c.clipRect(new Rect(0, 0, blitH+startX, blitH), Region.Op.REPLACE);
-					//else if(startX > 0)
-						//c.clipRect(new Rect(startX, 0, blitW, blitH), Region.Op.REPLACE);
-				}
 
-				//System.out.println("Blitting bitmap "+blitW+","+blitH+" @ "+
-					//patchX+","+patchY+" offset "+(offset / pageWidth));
+					//we have maximized the width with the renderPage, but the page could be
+					//	smaller than the screen
+					if(blitH > pageHeight)
+						blitH = pageHeight;
+				}
 
 				c.drawBitmap(pixelBuffer,
 					offset, pageWidth,
