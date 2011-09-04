@@ -154,7 +154,16 @@ public class PdfPage
 			//now draw at the top of the screen
 			destY = 0;
 		}
+		else if(destY > 0)
+		{
+			destH = screenHeight - destY;
+		}
 
+		//max of the available page
+		if(destH > screenPageHeight)
+			destH = screenPageHeight;
+
+		Log.v(TAG, "blit height="+destH+"/"+screenHeight+" @ "+destY);
 		c.drawBitmap(pixelBuffer, offset, screenPageWidth,
 			destX, destY, destW, destH,
 			false, (Paint)null);

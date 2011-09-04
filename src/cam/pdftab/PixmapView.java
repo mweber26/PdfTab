@@ -31,7 +31,7 @@ public class PixmapView extends SurfaceView
 	private boolean isScaling = false;
 	private int screenWidth, screenHeight;
 	private int threadInitialPage = 0;
-	private int mode = MODE_SINGLE_PAGE;
+	private int mode = MODE_CONTINUOUS;
 
 	public PixmapView(PdfActivity activity, PdfCore doc)
 	{
@@ -335,6 +335,15 @@ public class PixmapView extends SurfaceView
 				if(currentPage > 0)
 					getPage(currentPage - 1);
 			}
+			else
+			{
+				if(currentPage > 0)
+					getPage(currentPage - 1);
+				if(currentPage < doc.numPages)
+					getPage(currentPage + 1);
+				if(currentPage + 1 < doc.numPages)
+					getPage(currentPage + 2);
+			}
 		}
 
 		public void setPage(int page)
@@ -440,6 +449,9 @@ public class PixmapView extends SurfaceView
 
 		private void scrollContinuous(float distanceX, float distanceY)
 		{
+			PdfPageLayout cp = getPage(currentPage);
+         	cp.offsetY += (int)distanceY;
+			redraw();
 		}
 
 		public void fling(float velocityX, float velocityY)
@@ -471,13 +483,15 @@ public class PixmapView extends SurfaceView
 			redraw();
 		}
 
+		private int flingContinuousPrevious = 0;
 		private void verticalFlingContinuous(float velocityY)
 		{
 			PdfPageLayout cp = getPage(currentPage);
 
 			Log.d(TAG, "verticalFlingContinuous(" + velocityY + ")");
+			flingContinuousPrevious = 0;
 			scroller.fling(
-				cp.offsetX, cp.offsetY,
+				0, 0,
 				0, -(int)(velocityY * 1.25),
 				0, 0,
 				-32768, 32768,
@@ -623,13 +637,17 @@ public class PixmapView extends SurfaceView
 		private void scrollerSinglePage()
 		{
 			PdfPageLayout cp = getPage(currentPage);
-
 			cp.offsetY = scroller.getCurrY();
 		}
 
 		private void scrollerContinuous()
 		{
 			PdfPageLayout cp = getPage(currentPage);
+
+			int deltaY = scroller.getCurrY() - flingContinuousPrevious;
+			flingContinuousPrevious = scroller.getCurrY();
+
+			cp.offsetY += deltaY;
 		}
 
 		protected void drawSinglePage(Canvas c)
@@ -682,6 +700,65 @@ public class PixmapView extends SurfaceView
 
 		protected void drawContinuousPage(Canvas c)
 		{
+			Paint paintLine = new Paint();
+			paintLine.setStrokeWidth(1);
+			paintLine.setColor(0xFF000000);
+			
+			PdfPageLayout cp = getPage(currentPage);
+
+			//negative cp offset means that the previous page is really the current page
+			if(cp.offsetY < 0)
+			{
+				int oldCurrentPageOffsetY = cp.offsetY;
+
+				//change the page
+				setPage(currentPage - 1);
+
+				//get the new page as the current page
+				cp = getPage(currentPage);
+
+				//the new page's offset is how much of the previous page is not shown
+				cp.offsetY = cp.getPageHeight() + oldCurrentPageOffsetY;
+			}
+
+			//we know we have the correct current page with a positive offsetY now, so
+			//	if we are over the offset for the current page height, then the current page
+			//	is no longer visible
+			if(cp.offsetY >= cp.getPageHeight())
+			{
+				//the new page's offset is how much we went over on the current page
+				int newPageOffset = cp.offsetY - cp.getPageHeight();
+
+				//change the page
+				setPage(currentPage + 1);
+
+				//get the new page as the current page
+				cp = getPage(currentPage);
+				cp.offsetY = newPageOffset;
+			}
+
+			//draw the "current page"
+			cp.blit(c, 0);
+
+			//how much of the screen have we used with the current page?
+			int screenHeightUsed = -cp.offsetY + cp.getPageHeight();
+
+			//do we see any next pages?
+			if(screenHeightUsed < screenHeight)
+			{
+				//adjust the "next" pages
+				for(int i = 1; i < 10; i++)
+				{
+					PdfPageLayout np = getPage(currentPage + i);
+					np.offsetY = -screenHeightUsed;
+					np.blit(c, 0);
+					c.drawLine(0, -np.offsetY, getWidth(), -np.offsetY, paintLine);
+
+					screenHeightUsed += np.getPageHeight();
+					if(screenHeightUsed >= screenHeight)
+						break;
+				}
+			}
 		}
 
 		private class PdfPageLayout extends PdfPage
@@ -695,7 +772,7 @@ public class PixmapView extends SurfaceView
 			}
 
 			public void blit(Canvas c, int startX)
-			{
+			{	
 				super.blit(c, offsetX + startX, -offsetY);
 			}
 		}
