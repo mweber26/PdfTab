@@ -73,7 +73,7 @@ public class FilesActivity extends ListActivity
 					arr.add(f);
 			}
 
-			Collections.sort(arr);
+			Collections.sort(arr, new FileComparable());
 		}
 
 		setListAdapter(new FileAdapter(this, arr));
@@ -106,6 +106,21 @@ public class FilesActivity extends ListActivity
 			TextView tv = (TextView)row.findViewById(R.id.text);
 			tv.setText(item.getName());
 			return row;
+		}
+	}
+
+	private class FileComparable implements Comparator<File>
+	{
+		public int compare(File a, File b)
+		{
+			if(a.isDirectory() && b.isDirectory())
+				return a.compareTo(b);
+			else if(a.isFile() && b.isFile())
+				return a.compareTo(b);
+			else if(a.isDirectory() && b.isFile())
+				return -1;
+			else
+				return 1;
 		}
 	}
 }
