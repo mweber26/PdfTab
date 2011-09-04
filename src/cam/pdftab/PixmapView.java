@@ -19,6 +19,8 @@ public class PixmapView extends SurfaceView
 	implements SurfaceHolder.Callback, GestureDetector.OnGestureListener,
 	ScaleGestureDetector.OnScaleGestureListener
 {
+	protected final static int MODE_SINGLE_PAGE = 1;
+	protected final static int MODE_CONTINUOUS = 2;
 	protected final static String TAG = "PdfTab";
 	protected final GestureDetector gestureDetector;
 	protected final ScaleGestureDetector scaleGestureDetector;
@@ -29,6 +31,7 @@ public class PixmapView extends SurfaceView
 	private boolean isScaling = false;
 	private int screenWidth, screenHeight;
 	private int threadInitialPage = 0;
+	private int mode = MODE_SINGLE_PAGE;
 
 	public PixmapView(PdfActivity activity, PdfCore doc)
 	{
@@ -228,30 +231,123 @@ public class PixmapView extends SurfaceView
 		private SurfaceHolder holder;
 		private boolean running = false;
 		private int screenWidth, screenHeight;
-		private PdfPageLayout currentPage, nextPage, prevPage;
 		private boolean isWaiting = false;
 		private long pageTurnAnimationStart = -1;
 		private int pageTurnOffset;
 		private boolean pageTurnRight = false;
 		private int scrollingOffsetX = 0;
 		private java.util.Stack<Integer> stack = new java.util.Stack<Integer>();
+		private PdfPageLayout[] pages;
+		private int currentPage = -1;
 
 		public PdfThread(SurfaceHolder holder)
 		{
 			running = true;
 			this.holder = holder;
 			this.scroller = new OverScroller(activity);
+			pages = new PdfPageLayout[4];
 		}
 
 		public OverScroller getScroller() { return scroller; }
-		public int getCurrentPage() { return currentPage.getPageNum() + 1; }
+		public int getCurrentPage() { return currentPage + 1; }
 
-		public void setPage(int pageIndex)
+		private PdfPageLayout getPage(int page)
 		{
-			stack.push(currentPage.getPageNum());
-			currentPage = new PdfPageLayout(pageIndex);
-			prevPage = null;
-			nextPage = null;
+			//already have the page cached?
+			for(int i = 0; i < pages.length; i++)
+			{
+				if(pages[i] != null && pages[i].getPageNum() == page)
+					return pages[i];
+			}
+
+			//do we have a free spot for the page?
+			for(int i = 0; i < pages.length; i++)
+			{
+				if(pages[i] == null)
+				{
+					pages[i] = new PdfPageLayout(page);
+					dumpPageList();
+					return pages[i];
+				}
+			}
+
+			int chosen = 0;
+
+			//no free spots so we have to overwrite somebody
+			for(int i = 1; i < pages.length; i++)
+			{
+				int dist0 = page - pages[chosen].getPageNum();
+				int dist1 = page - pages[i].getPageNum();
+
+				if(dist0 < 0) dist0 = -dist0;
+				if(dist1 < 0) dist1 = -dist1;
+
+				//if this has a larget diff than the chosen one choose this one
+				if(dist1 > dist0)
+				{
+					chosen = i;
+				}
+				//if the diff are the same choose the one with the lower page number
+				else if(dist0 == dist1)
+				{	
+					if(pages[i].getPageNum() < pages[chosen].getPageNum())
+						chosen = i;
+				}
+			}
+
+			Log.v(TAG, String.format("no free pages, evicting %d for new page %d",
+				pages[chosen].getPageNum(), page));
+
+			//load the new page
+			pages[chosen] = new PdfPageLayout(page);
+			dumpPageList();
+			return pages[chosen];
+		}
+
+		private void dumpPageList()
+		{
+			String dump = "page list: ";
+
+			for(int i = 0; i < pages.length; i++)
+			{
+				if(i != 0)
+					dump = dump + ",";
+
+				if(pages[i] == null)
+					dump = dump + "F";
+				else
+				{
+					dump = dump + pages[i].getPageNum();
+					if(pages[i].getPageNum() == currentPage)
+						dump = dump + "*";
+				}
+			}
+
+			Log.v(TAG, dump);
+		}
+
+		private void cacheAdditionalPages()
+		{
+			if(mode == MODE_SINGLE_PAGE)
+			{
+				if(currentPage < doc.numPages)
+					getPage(currentPage + 1);
+				if(currentPage > 0)
+					getPage(currentPage - 1);
+			}
+		}
+
+		public void setPage(int page)
+		{
+			if(page != currentPage)
+			{
+				if(currentPage >= 0)
+					stack.push(currentPage);
+
+				currentPage = page;
+				getPage(currentPage);
+				updateActivityCurrentPage();
+			}
 			redraw();
 		}
 
@@ -270,13 +366,12 @@ public class PixmapView extends SurfaceView
 		{
 			if(stack.size() > 0)
 			{
+				//can't use set page since it adds to history
 				int newPage = (int)stack.pop();
-
-				currentPage = new PdfPageLayout(newPage);
-				prevPage = null;
-				nextPage = null;
-				redraw();
+				currentPage = newPage;
+				getPage(currentPage);
 				updateActivityCurrentPage();
+				redraw();
 			}
 		}
 
@@ -285,35 +380,66 @@ public class PixmapView extends SurfaceView
 			activity.showCurrentPage();
 		}
 
-		public void changePage(int pageNum)
-		{
-			currentPage = new PdfPageLayout(pageNum);
-			prevPage = null;
-			nextPage = null;
-			redraw();
-			updateActivityCurrentPage();
-		}
-
 		public void screenChanged(int width, int height)
 		{
 			this.screenWidth = width;
 			this.screenHeight = height;
 
-			if(currentPage != null)
-				currentPage.setScreenSize(width, height);
+			for(PdfPageLayout p : pages)
+			{
+				if(p != null) p.setScreenSize(width, height);
+			}
+
 			redraw();
 		}
 
 		public void springBack()
 		{
-			//if(!isAnimating())
-				//currentPage.springBack();
+			if(!isAnimating())
+			{
+				if(mode == MODE_SINGLE_PAGE)
+					springBackSinglePage();
+			}
+		}
+
+		private void springBackSinglePage()
+		{
+			PdfPageLayout cp = getPage(currentPage);
+
+			if(screenHeight >= cp.getPageHeight() && screenWidth >= cp.getPageWidth())
+				return;
+
+			scroller.springBack(
+				cp.offsetX, cp.offsetY,
+				0, 0,
+				0, cp.getPageHeight() - screenHeight);
+			redraw();
 		}
 
 		public void scroll(float distanceX, float distanceY)
 		{
-			//if(!isAnimating())
-				//currentPage.scroll(distanceX, distanceY);
+			if(!isAnimating())
+			{
+				if(mode == MODE_SINGLE_PAGE)
+					scrollSinglePage(distanceX, distanceY);
+				else
+					scrollContinuous(distanceX, distanceY);
+			}
+		}
+
+		private void scrollSinglePage(float distanceX, float distanceY)
+		{
+			PdfPageLayout cp = getPage(currentPage);
+
+			if(screenHeight >= cp.getPageHeight() && screenWidth >= cp.getPageWidth())
+				return;
+
+         	cp.offsetY += (int)distanceY;
+			redraw();
+		}
+
+		private void scrollContinuous(float distanceX, float distanceY)
+		{
 		}
 
 		public void fling(float velocityX, float velocityY)
@@ -321,26 +447,40 @@ public class PixmapView extends SurfaceView
 			//only fling if we aren't already moving
 			if(!isAnimating())
 			{
-				verticalFlingSinglePage(velocityY);
-
-				//if(Math.abs(velocityX) > Math.abs(velocityY))
-					//currentPage.pageTurn(velocityX);
-				//else
-					//currentPage.fling(velocityX, velocityY);
+				if(mode == MODE_SINGLE_PAGE)
+					verticalFlingSinglePage(velocityY);
+				else
+					verticalFlingContinuous(velocityY);
 			}
 		}
 
 		private void verticalFlingSinglePage(float velocityY)
 		{
-			if(screenHeight >= currentPage.getPageHeight() && screenWidth >= currentPage.getPageWidth())
+			PdfPageLayout cp = getPage(currentPage);
+
+			if(screenHeight >= cp.getPageHeight() && screenWidth >= cp.getPageWidth())
 				return;
 
 			Log.d(TAG, "verticalFlingSinglePage(" + velocityY + ")");
 			scroller.fling(
-				currentPage.offsetX, currentPage.offsetY,
+				cp.offsetX, cp.offsetY,
 				0, -(int)(velocityY * 1.25),
 				0, 0,
-				0, currentPage.getPageHeight() - screenHeight,
+				0, cp.getPageHeight() - screenHeight,
+				0, 50);
+			redraw();
+		}
+
+		private void verticalFlingContinuous(float velocityY)
+		{
+			PdfPageLayout cp = getPage(currentPage);
+
+			Log.d(TAG, "verticalFlingContinuous(" + velocityY + ")");
+			scroller.fling(
+				cp.offsetX, cp.offsetY,
+				0, -(int)(velocityY * 1.25),
+				0, 0,
+				-32768, 32768,
 				0, 50);
 			redraw();
 		}
@@ -363,33 +503,47 @@ public class PixmapView extends SurfaceView
 		{
 			if(!isAnimating())
 			{
-				int pageLink = currentPage.findLink((int)x, (int)y);
-
-				if(pageLink >= 0)
-				{
-					changePage(pageLink);
-				}
-				else if(x >= screenWidth - screenWidth / 4 && currentPage.getPageNum() < doc.numPages)
-				{
-					startPageTurnAnimation();
-					pageTurnRight = true;
-				}
-				else if(x <= screenWidth / 4 && currentPage.getPageNum() > 0)
-				{
-					startPageTurnAnimation();
-					pageTurnRight = false;
-				}
-				else if(x >= screenWidth / 4 && x <= screenWidth * 3 / 4 &&
-					y >= screenHeight / 4 && y <= screenHeight * 3 / 4)
-				{
-					activity.clickInControlRegion(); 
-				}
+				if(mode == MODE_SINGLE_PAGE)
+					onTapSinglePage(x, y);
+				else
+					onTapContinuous(x, y);
 			}
+		}
+
+		private void onTapSinglePage(float x, float y)
+		{
+			PdfPageLayout cp = getPage(currentPage);
+
+			int pageLink = cp.findLink((int)x, (int)y);
+			if(pageLink >= 0)
+			{
+				setPage(pageLink);
+			}
+			else if(x >= screenWidth - screenWidth / 4 && cp.getPageNum() < doc.numPages)
+			{
+				startPageTurnAnimation();
+				pageTurnRight = true;
+			}
+			else if(x <= screenWidth / 4 && cp.getPageNum() > 0)
+			{
+				startPageTurnAnimation();
+				pageTurnRight = false;
+			}
+			else if(x >= screenWidth / 4 && x <= screenWidth * 3 / 4 &&
+				y >= screenHeight / 4 && y <= screenHeight * 3 / 4)
+			{
+				activity.clickInControlRegion(); 
+			}
+		}
+
+		private void onTapContinuous(float x, float y)
+		{
+			activity.clickInControlRegion(); 
 		}
 
 		public void run()
 		{
-			changePage(threadInitialPage);
+			setPage(threadInitialPage);
 
 			while(running)
 			{
@@ -413,23 +567,10 @@ public class PixmapView extends SurfaceView
 							scrollingOffsetX = 0;
 							pageTurnAnimationStart = -1;
 
-							stack.push(currentPage.getPageNum());
-
 							if(pageTurnRight)
-							{
-								prevPage = currentPage;
-								currentPage = nextPage;
-								nextPage = null;
-							}
+								setPage(currentPage + 1);
 							else
-							{
-								PdfPageLayout p = currentPage;
-								currentPage = prevPage;
-								nextPage = p;
-								prevPage = null;
-							}
-
-							updateActivityCurrentPage();
+								setPage(currentPage - 1);
 						}
 						else
 						{
@@ -446,7 +587,10 @@ public class PixmapView extends SurfaceView
 							if(scroller.computeScrollOffset())
 							{
 								scrollingOffsetX = scroller.getCurrX();
-								currentPage.offsetY = scroller.getCurrY();
+								if(mode == MODE_SINGLE_PAGE)
+									scrollerSinglePage();
+								else
+									scrollerContinuous();
 							}
 							else
 							{
@@ -455,7 +599,10 @@ public class PixmapView extends SurfaceView
 						}
 					}
 
-					drawPage(c);
+					if(mode == MODE_SINGLE_PAGE)
+						drawSinglePage(c);
+					else
+						drawContinuousPage(c);
 				}
 				finally
 				{
@@ -465,11 +612,7 @@ public class PixmapView extends SurfaceView
 
 				if(doSleep)
 				{
-					if(nextPage == null && currentPage.getPageNum() < doc.numPages)
-						nextPage = new PdfPageLayout(currentPage.getPageNum() + 1);
-					
-					if(prevPage == null && currentPage.getPageNum() > 0)
-						prevPage = new PdfPageLayout(currentPage.getPageNum() - 1);
+					cacheAdditionalPages();
 
 					try { sleep(3600000); }
 					catch(Exception e) { }
@@ -477,19 +620,36 @@ public class PixmapView extends SurfaceView
 			}
 		}
 
-		protected void drawPage(Canvas c)
+		private void scrollerSinglePage()
 		{
+			PdfPageLayout cp = getPage(currentPage);
+
+			cp.offsetY = scroller.getCurrY();
+		}
+
+		private void scrollerContinuous()
+		{
+			PdfPageLayout cp = getPage(currentPage);
+		}
+
+		protected void drawSinglePage(Canvas c)
+		{
+			PdfPageLayout cp = getPage(currentPage);
+
 			if(pageTurnAnimationStart > 0)
 			{
 				if(pageTurnRight)
 				{
-					currentPage.blit(c, -pageTurnOffset);
-					nextPage.blit(c, screenWidth - pageTurnOffset + pageTurnSpacing);
+					PdfPageLayout np = getPage(currentPage + 1);
+					cp.blit(c, -pageTurnOffset);
+					np.blit(c, screenWidth - pageTurnOffset + pageTurnSpacing);
 				}
 				else
 				{
-					currentPage.blit(c, pageTurnOffset);
-					prevPage.blit(c, -screenWidth - pageTurnSpacing + pageTurnOffset);
+					PdfPageLayout pp = getPage(currentPage - 1);
+
+					cp.blit(c, pageTurnOffset);
+					pp.blit(c, -screenWidth - pageTurnSpacing + pageTurnOffset);
 				}
 			}
 			else if(scrollingOffsetX != 0)
@@ -516,8 +676,12 @@ public class PixmapView extends SurfaceView
 			}
 			else
 			{
-				currentPage.blit(c, 0);
+				cp.blit(c, 0);
 			}
+		}
+
+		protected void drawContinuousPage(Canvas c)
+		{
 		}
 
 		private class PdfPageLayout extends PdfPage
