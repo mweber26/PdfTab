@@ -341,8 +341,6 @@ public class PixmapView extends SurfaceView
 					getPage(currentPage - 1);
 				if(currentPage < doc.numPages)
 					getPage(currentPage + 1);
-				if(currentPage + 1 < doc.numPages)
-					getPage(currentPage + 2);
 			}
 		}
 
@@ -443,14 +441,20 @@ public class PixmapView extends SurfaceView
 			if(screenHeight >= cp.getPageHeight() && screenWidth >= cp.getPageWidth())
 				return;
 
-         	cp.offsetY += (int)distanceY;
+			synchronized(this)
+			{
+         		cp.offsetY += (int)distanceY;
+			}
 			redraw();
 		}
 
 		private void scrollContinuous(float distanceX, float distanceY)
 		{
 			PdfPageLayout cp = getPage(currentPage);
-         	cp.offsetY += (int)distanceY;
+			synchronized(this)
+			{
+         		cp.offsetY += (int)distanceY;
+			}
 			redraw();
 		}
 
@@ -703,45 +707,53 @@ public class PixmapView extends SurfaceView
 			Paint paintLine = new Paint();
 			paintLine.setStrokeWidth(1);
 			paintLine.setColor(0xFF000000);
-			
+
+			int cpOffsetY;
 			PdfPageLayout cp = getPage(currentPage);
 
-			//negative cp offset means that the previous page is really the current page
-			if(cp.offsetY < 0)
+			//we need to sync while we are reading and changing cp.offsetY
+			synchronized(this)
 			{
-				int oldCurrentPageOffsetY = cp.offsetY;
+				//negative cp offset means that the previous page is really the current page
+				if(cp.offsetY < 0)
+				{
+					int oldCurrentPageOffsetY = cp.offsetY;
 
-				//change the page
-				setPage(currentPage - 1);
+					//change the page
+					setPage(currentPage - 1);
 
-				//get the new page as the current page
-				cp = getPage(currentPage);
+					//get the new page as the current page
+					cp = getPage(currentPage);
+	
+					//the new page's offset is how much of the previous page is not shown
+					cp.offsetY = cp.getPageHeight() + oldCurrentPageOffsetY;
+				}
 
-				//the new page's offset is how much of the previous page is not shown
-				cp.offsetY = cp.getPageHeight() + oldCurrentPageOffsetY;
+				//we know we have the correct current page with a positive offsetY now, so
+				//	if we are over the offset for the current page height, then the current page
+				//	is no longer visible
+				if(cp.offsetY >= cp.getPageHeight())
+				{
+					//the new page's offset is how much we went over on the current page
+					int newPageOffset = cp.offsetY - cp.getPageHeight();
+
+					//change the page
+					setPage(currentPage + 1);
+
+					//get the new page as the current page
+					cp = getPage(currentPage);
+					cp.offsetY = newPageOffset;
+				}
+
+				//get a local copy
+				cpOffsetY = cp.offsetY;
 			}
 
-			//we know we have the correct current page with a positive offsetY now, so
-			//	if we are over the offset for the current page height, then the current page
-			//	is no longer visible
-			if(cp.offsetY >= cp.getPageHeight())
-			{
-				//the new page's offset is how much we went over on the current page
-				int newPageOffset = cp.offsetY - cp.getPageHeight();
-
-				//change the page
-				setPage(currentPage + 1);
-
-				//get the new page as the current page
-				cp = getPage(currentPage);
-				cp.offsetY = newPageOffset;
-			}
-
-			//draw the "current page"
-			cp.blit(c, 0);
+			//draw the "current page" (using our saved offset Y)
+			cp.blit(c, cp.offsetX, cpOffsetY);
 
 			//how much of the screen have we used with the current page?
-			int screenHeightUsed = -cp.offsetY + cp.getPageHeight();
+			int screenHeightUsed = -cpOffsetY + cp.getPageHeight();
 
 			//do we see any next pages?
 			if(screenHeightUsed < screenHeight)
@@ -769,6 +781,11 @@ public class PixmapView extends SurfaceView
 			{
 				super(activity, doc, pageNum);
 				setScreenSize(screenWidth, screenHeight);
+			}
+
+			public void blit(Canvas c, int x, int y)
+			{	
+				super.blit(c, x, -y);
 			}
 
 			public void blit(Canvas c, int startX)

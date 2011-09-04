@@ -163,7 +163,7 @@ public class PdfPage
 		if(destH > screenPageHeight)
 			destH = screenPageHeight;
 
-		Log.v(TAG, "blit height="+destH+"/"+screenHeight+" @ "+destY);
+		//Log.v(TAG, "blit height="+destH+"/"+screenHeight+" @ "+destY);
 		c.drawBitmap(pixelBuffer, offset, screenPageWidth,
 			destX, destY, destW, destH,
 			false, (Paint)null);
