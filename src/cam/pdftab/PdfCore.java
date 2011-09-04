@@ -40,7 +40,6 @@ public class PdfCore
 		int patchX, int patchY,
 		int patchW, int patchH)
 	{
-		System.gc();
 		int[] ret = new int[patchW * patchH];
 		drawPage(ret, pageW, pageH, patchX, patchY, patchW, patchH);
 		return ret;

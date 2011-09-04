@@ -22,6 +22,8 @@ public class PixmapView extends SurfaceView
 	protected final static int MODE_SINGLE_PAGE = 1;
 	protected final static int MODE_CONTINUOUS = 2;
 	protected final static String TAG = "PdfTab";
+	protected final static int pageBorderSize = 10;
+
 	protected final GestureDetector gestureDetector;
 	protected final ScaleGestureDetector scaleGestureDetector;
 	private PdfActivity activity;
@@ -29,7 +31,7 @@ public class PixmapView extends SurfaceView
 	private PdfThread thread = null;
 	private PdfCore doc;
 	private boolean isScaling = false;
-	private int screenWidth, screenHeight;
+	private int screenWidth, screenHeight, screenFormat;
 	private int threadInitialPage = 0;
 	private int mode = MODE_CONTINUOUS;
 
@@ -197,9 +199,11 @@ public class PixmapView extends SurfaceView
 
 	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
 	{
+		Log.v(TAG, String.format("surface = %dx%d, format %d", width, height, format));
 		screenWidth = width;
 		screenHeight = height;
-		thread.screenChanged(width, height);
+		screenFormat = format;
+		thread.screenChanged();
 	}
 
 	public void surfaceDestroyed(SurfaceHolder holder)
@@ -230,7 +234,6 @@ public class PixmapView extends SurfaceView
 		private final OverScroller scroller;
 		private SurfaceHolder holder;
 		private boolean running = false;
-		private int screenWidth, screenHeight;
 		private boolean isWaiting = false;
 		private long pageTurnAnimationStart = -1;
 		private int pageTurnOffset;
@@ -253,6 +256,9 @@ public class PixmapView extends SurfaceView
 
 		private PdfPageLayout getPage(int page)
 		{
+			if(screenWidth <= 0 && screenHeight <= 0)
+				return null;
+
 			//already have the page cached?
 			for(int i = 0; i < pages.length; i++)
 			{
@@ -363,7 +369,7 @@ public class PixmapView extends SurfaceView
 			running = false;
 			interrupt();
 		}
-	
+
 		public void redraw()
 		{
 			interrupt();
@@ -387,14 +393,19 @@ public class PixmapView extends SurfaceView
 			activity.showCurrentPage();
 		}
 
-		public void screenChanged(int width, int height)
+		public void screenChanged()
 		{
-			this.screenWidth = width;
-			this.screenHeight = height;
-
 			for(PdfPageLayout p : pages)
 			{
-				if(p != null) p.setScreenSize(width, height);
+				if(p != null)
+				{
+					//make sure we set this before the setScreenSize, so the page
+					//	can take it into account
+					if(mode == MODE_CONTINUOUS)
+						p.setScreenPadding(pageBorderSize);
+
+					p.setScreenInfo(screenWidth, screenHeight, screenFormat);
+				}
 			}
 
 			redraw();
@@ -568,19 +579,20 @@ public class PixmapView extends SurfaceView
 				boolean doSleep = true;
 				Canvas c = null;
 
+				//long begin = System.currentTimeMillis();
 				try
 				{
 					c = holder.lockCanvas(null);
-					c.drawRGB(0, 0, 0);
+					c.drawRGB(0x9C, 0x9C, 0x9C);
 
 					if(pageTurnAnimationStart > 0)
 					{
 						doSleep = false;
 
 						final long time = AnimationUtils.currentAnimationTimeMillis();
-						final long duration = time - pageTurnAnimationStart;
+						final long animDiff = time - pageTurnAnimationStart;
 
-						if(duration >= pageTurnDuration)
+						if(animDiff >= pageTurnDuration)
 						{
 							scrollingOffsetX = 0;
 							pageTurnAnimationStart = -1;
@@ -593,7 +605,7 @@ public class PixmapView extends SurfaceView
 						else
 						{
 							pageTurnOffset = (int)(((screenWidth + pageTurnSpacing) *
-								duration) / pageTurnDuration);
+								animDiff) / pageTurnDuration);
 						}
 					}
 					else
@@ -628,6 +640,9 @@ public class PixmapView extends SurfaceView
 						holder.unlockCanvasAndPost(c);
 				}
 
+				//long duration = System.currentTimeMillis() - begin;
+				//Log.v(TAG, String.format("frame : %d ms", duration));
+
 				if(doSleep)
 				{
 					cacheAdditionalPages();
@@ -657,6 +672,7 @@ public class PixmapView extends SurfaceView
 		protected void drawSinglePage(Canvas c)
 		{
 			PdfPageLayout cp = getPage(currentPage);
+			if(cp == null) return;
 
 			if(pageTurnAnimationStart > 0)
 			{
@@ -705,8 +721,8 @@ public class PixmapView extends SurfaceView
 		protected void drawContinuousPage(Canvas c)
 		{
 			Paint paintLine = new Paint();
-			paintLine.setStrokeWidth(1);
-			paintLine.setColor(0xFF000000);
+			paintLine.setStrokeWidth(3);
+			paintLine.setColor(0xFFAAAAAA);
 
 			int cpOffsetY;
 			PdfPageLayout cp = getPage(currentPage);
@@ -764,7 +780,7 @@ public class PixmapView extends SurfaceView
 					PdfPageLayout np = getPage(currentPage + i);
 					np.offsetY = -screenHeightUsed;
 					np.blit(c, 0);
-					c.drawLine(0, -np.offsetY, getWidth(), -np.offsetY, paintLine);
+					//c.drawLine(0, -np.offsetY - 1, getWidth(), -np.offsetY - 1, paintLine);
 
 					screenHeightUsed += np.getPageHeight();
 					if(screenHeightUsed >= screenHeight)
@@ -780,7 +796,16 @@ public class PixmapView extends SurfaceView
 			public PdfPageLayout(int pageNum)
 			{
 				super(activity, doc, pageNum);
-				setScreenSize(screenWidth, screenHeight);
+
+				//make sure we set this before the setScreenSize, so the page
+				//	can take it into account
+				if(mode == MODE_CONTINUOUS)
+					setScreenPadding(pageBorderSize);
+
+				setScreenInfo(screenWidth, screenHeight, screenFormat);
+
+				//set the initial offset to the border size
+				offsetY = -pageBorderSize;
 			}
 
 			public void blit(Canvas c, int x, int y)
@@ -789,7 +814,7 @@ public class PixmapView extends SurfaceView
 			}
 
 			public void blit(Canvas c, int startX)
-			{	
+			{
 				super.blit(c, offsetX + startX, -offsetY);
 			}
 		}

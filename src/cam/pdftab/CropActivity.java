@@ -200,7 +200,7 @@ public class CropActivity extends Activity
 
 			Paint paintLine = new Paint();
 			paintLine.setStrokeWidth(1);
-			paintLine.setColor(0xFFFF0000);
+			paintLine.setColor(0xFFDA1F28);
 
 			Paint paintDim = new Paint();
 			paintDim.setColor(0x80000000);
