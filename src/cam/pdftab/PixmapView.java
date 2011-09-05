@@ -410,10 +410,15 @@ public class PixmapView extends SurfaceView
 					//	can take it into account
 					if(mode == MODE_CONTINUOUS)
 						p.setScreenPadding(pageBorderSize);
+					else
+						p.setScreenPadding(0);
 
 					p.setScreenInfo(screenWidth, screenHeight, screenFormat);
 				}
 			}
+
+			if(mode == MODE_SINGLE_PAGE)
+				springBack();
 
 			redraw();
 		}
@@ -836,6 +841,8 @@ public class PixmapView extends SurfaceView
 				//	can take it into account
 				if(mode == MODE_CONTINUOUS)
 					setScreenPadding(pageBorderSize);
+				else
+					setScreenPadding(0);
 
 				setScreenInfo(screenWidth, screenHeight, screenFormat);
 
@@ -850,6 +857,12 @@ public class PixmapView extends SurfaceView
 
 			public void blit(Canvas c, int startX)
 			{
+				if(mode == MODE_SINGLE_PAGE)
+				{
+					if(screenHeight >= getPageHeight() && screenWidth >= getPageWidth())
+						offsetY = -((screenHeight - getPageHeight()) / 2);
+				}
+
 				super.blit(c, offsetX + startX, -offsetY);
 			}
 		}

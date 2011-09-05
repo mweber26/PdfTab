@@ -185,6 +185,7 @@ JNIEXPORT jboolean JNICALL Java_cam_pdftab_PdfCore_drawPage(JNIEnv *env, jobject
 	float xscale, yscale;
 	fz_bbox rect;
 	jint *pixels;
+	fz_text_span *text_span;
 	clock_t end, start = clock();
 
 	//call mupdf to render display list to screen
@@ -220,6 +221,13 @@ JNIEXPORT jboolean JNICALL Java_cam_pdftab_PdfCore_drawPage(JNIEnv *env, jobject
 	fz_execute_display_list(currentPageList, dev, ctm, bbox);
 	fz_free_device(dev);
 	fz_drop_pixmap(pix);
+
+	//compute the text spans for the page
+	//text_span = fz_new_text_span();
+	//dev = fz_new_text_device(text_span);
+	//fz_execute_display_list(currentPageList, dev, ctm, bbox);
+	//fz_free_device(dev);
+	//fz_free_text_span(text_span);
 
 	(*env)->ReleasePrimitiveArrayCritical(env, buf, pixels, 0);
 	end = clock();
