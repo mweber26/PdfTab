@@ -40,11 +40,6 @@ public class PdfActivity extends Activity
 		Intent intent = getIntent();
 		if(intent.getAction().equals(Intent.ACTION_VIEW))
 		{
-ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
-activityManager.getMemoryInfo(mi);
-Log.i("memory free", "" + mi.availMem);
-
 			if(core != null)
 			{
 				Log.v(TAG, "reset core for new file");
@@ -79,6 +74,8 @@ Log.i("memory free", "" + mi.availMem);
 		seeker.setThumbOffset(18);
 		seeker.setOnSeekBarChangeListener(seekChangePage);
 		seeker.setMax(pdfView.getNumPages() - 1);
+
+		updateMenus();
 	}
 
 	public void onPause()
@@ -113,6 +110,24 @@ Log.i("memory free", "" + mi.availMem);
 		}
 	}
 
+	private void updateMenus()
+	{
+		SharedPreferences settings = getSharedPreferences("options", Activity.MODE_PRIVATE);
+		int mode = settings.getInt("page_style", PixmapView.MODE_CONTINUOUS);
+
+		Button modeButton = (Button)findViewById(R.id.page_mode);
+		if(mode == PixmapView.MODE_CONTINUOUS)
+		{
+			modeButton.setText("Continuous mode");
+			modeButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_continuouspage, 0, 0, 0);
+		}
+		if(mode == PixmapView.MODE_SINGLE_PAGE)
+		{
+			modeButton.setText("Single mode");
+			modeButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_singlepage, 0, 0, 0);
+		}
+	}
+
 	Runnable showPageBadgeTask = new Runnable() {
 		public void run() {
 			currentpage.setText(String.format("%d of %d",
@@ -141,6 +156,10 @@ Log.i("memory free", "" + mi.availMem);
 				slideDown.reset();
 				controls.startAnimation(slideDown);
 				controls.setVisibility(View.VISIBLE);
+
+				fadeIn.reset();
+				seeker.startAnimation(fadeIn);
+				seeker.setVisibility(View.VISIBLE);
 				handler.postDelayed(hideControlsTask, controlsTimeout);
 			}
 			else
@@ -156,6 +175,10 @@ Log.i("memory free", "" + mi.availMem);
 			slideUp.reset();
 			controls.startAnimation(slideUp);
 			controls.setVisibility(View.INVISIBLE);
+
+			fadeOut.reset();
+			seeker.startAnimation(fadeOut);
+			seeker.setVisibility(View.INVISIBLE);
 		}
 	};
 
@@ -166,6 +189,26 @@ Log.i("memory free", "" + mi.availMem);
 			currentpage.setVisibility(View.INVISIBLE);
 		}
 	};
+
+	public void onPageMode(View view)
+	{
+		final CharSequence[] items = { "Single page mode", "Continuous page mode" };
+
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		builder.setTitle("Change page display style");
+
+		builder.setItems(items, new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int item) {
+				SharedPreferences settings = getSharedPreferences("options", Activity.MODE_PRIVATE);
+				settings.edit().putInt("page_style", item + 1).commit();
+				updateMenus();
+				pdfView.pageStyleChanged();
+			}
+		});
+
+		AlertDialog dialog = builder.create();
+		dialog.show();
+	}
 
 	public void onExit(View view)
 	{

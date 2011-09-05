@@ -63,12 +63,22 @@
 			android:drawableLeft="@drawable/ic_menu_crop"
 			style="@style/HoloButton"
 		/>
+
+		<Button
+			android:id="@+id/page_mode"
+			android:layout_toLeftOf="@id/crop"
+			android:onClick="onPageMode"
+			android:text="Continuous page"
+			android:drawableLeft="@drawable/ic_menu_continuouspage"
+			style="@style/HoloButton"
+		/>
 	</RelativeLayout>
 		
 	<SeekBar
 		android:id="@+id/pageseek"
 		android:layout_width="fill_parent"
 		android:layout_height="wrap_content"
+		android:visibility="invisible"
 		android:layout_alignParentBottom="true"
 		android:paddingLeft="40dp"
 		android:paddingRight="40dp"

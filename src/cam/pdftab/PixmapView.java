@@ -16,7 +16,7 @@ import java.io.*;
 import java.util.*;
 
 public class PixmapView extends SurfaceView
-	implements SurfaceHolder.Callback, GestureDetector.OnGestureListener,
+	implements SurfaceHolder.Callback, cam.pdftab.GestureDetector.OnGestureListener,
 	ScaleGestureDetector.OnScaleGestureListener
 {
 	protected final static int MODE_SINGLE_PAGE = 1;
@@ -24,7 +24,7 @@ public class PixmapView extends SurfaceView
 	protected final static String TAG = "PdfTab";
 	protected final static int pageBorderSize = 10;
 
-	protected final GestureDetector gestureDetector;
+	protected final cam.pdftab.GestureDetector gestureDetector;
 	protected final ScaleGestureDetector scaleGestureDetector;
 	private PdfActivity activity;
 	private SurfaceHolder holder;
@@ -33,7 +33,7 @@ public class PixmapView extends SurfaceView
 	private boolean isScaling = false;
 	private int screenWidth, screenHeight, screenFormat;
 	private int threadInitialPage = 0;
-	private int mode = MODE_CONTINUOUS;
+	private int mode;
 
 	public PixmapView(PdfActivity activity, PdfCore doc)
 	{
@@ -41,12 +41,14 @@ public class PixmapView extends SurfaceView
 
 		this.doc = doc;
 		this.activity = activity;
-		this.gestureDetector = new GestureDetector(activity, this);
+		this.gestureDetector = new cam.pdftab.GestureDetector(activity, this);
 		this.scaleGestureDetector = new ScaleGestureDetector(activity, this);
 
 		holder = getHolder();
 		holder.addCallback(this);
 		setFocusable(true);
+
+		pageStyleChanged();
 	}
 
 	public void setPage(int pageIndex)
@@ -78,21 +80,17 @@ public class PixmapView extends SurfaceView
 		if(!activity.canAcceptPageActions())
 			return false;
 
-		switch(event.getAction() & MotionEvent.ACTION_MASK)
+		if(!thread.onTouchEvent(event))
 		{
-			case MotionEvent.ACTION_UP:
-			case MotionEvent.ACTION_POINTER_UP:
-			{
-				thread.springBack();
-			}
+			scaleGestureDetector.onTouchEvent(event);
+			if(scaleGestureDetector.isInProgress() || isScaling)
+				return true;
+			if(gestureDetector.onTouchEvent(event))
+				return true;
+			return super.onTouchEvent(event);
 		}
 
-		scaleGestureDetector.onTouchEvent(event);
-		if(scaleGestureDetector.isInProgress() || isScaling)
-			return true;
-		if(gestureDetector.onTouchEvent(event))
-			return true;
-		return super.onTouchEvent(event);
+		return true;
 	}
 
 	@Override public boolean onKeyDown(int keyCode, KeyEvent event)
@@ -195,6 +193,15 @@ public class PixmapView extends SurfaceView
 	{
 		thread = new PdfThread(holder);
 		thread.start();
+	}
+
+	public void pageStyleChanged()
+	{
+		SharedPreferences settings = activity.getSharedPreferences("options", Activity.MODE_PRIVATE);
+		mode = settings.getInt("page_style", MODE_CONTINUOUS);
+
+		if(thread != null)
+			thread.screenChanged();
 	}
 
 	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
@@ -411,7 +418,35 @@ public class PixmapView extends SurfaceView
 			redraw();
 		}
 
-		public void springBack()
+		public boolean onTouchEvent(MotionEvent event)
+		{
+			switch(event.getAction() & MotionEvent.ACTION_MASK)
+			{
+				case MotionEvent.ACTION_DOWN:
+				{
+					if(!scroller.isFinished())
+					{
+						// stop the current scroll animation, but if this is
+						// the start of a fling, allow it to add to the current
+						// fling's velocity
+						scroller.abortAnimation();
+
+						//each the tap
+						return true;
+					}
+					break;
+				}
+				case MotionEvent.ACTION_UP:
+				{
+					springBack();
+					break;
+				}
+			}
+
+			return false;
+		}
+
+		private void springBack()
 		{
 			if(!isAnimating())
 			{
