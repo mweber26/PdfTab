@@ -25,6 +25,8 @@ public class PdfActivity extends Activity
 	private View controls;
 	private Animation fadeIn;
 	private Animation fadeOut;
+	private Animation slideDown;
+	private Animation slideUp;
 
 	public static PdfCore getPdfCore()
 	{
@@ -70,6 +72,8 @@ Log.i("memory free", "" + mi.availMem);
 		currentpage = (TextView)findViewById(R.id.currentpage);
 		fadeIn = AnimationUtils.loadAnimation(this, R.anim.fade_in);
 		fadeOut = AnimationUtils.loadAnimation(this, R.anim.fade_out);
+		slideDown = AnimationUtils.loadAnimation(this, R.anim.slide_down);
+		slideUp = AnimationUtils.loadAnimation(this, R.anim.slide_up);
 
 		seeker = (SeekBar)findViewById(R.id.pageseek);
 		seeker.setThumbOffset(18);
@@ -134,8 +138,8 @@ Log.i("memory free", "" + mi.availMem);
 		public void run() {
 			if(controls.getVisibility() == View.INVISIBLE)
 			{
-				fadeIn.reset();
-				controls.startAnimation(fadeIn);
+				slideDown.reset();
+				controls.startAnimation(slideDown);
 				controls.setVisibility(View.VISIBLE);
 				handler.postDelayed(hideControlsTask, controlsTimeout);
 			}
@@ -149,8 +153,8 @@ Log.i("memory free", "" + mi.availMem);
 
 	Runnable hideControlsTask = new Runnable() {
 		public void run() {
-			fadeOut.reset();
-			controls.startAnimation(fadeOut);
+			slideUp.reset();
+			controls.startAnimation(slideUp);
 			controls.setVisibility(View.INVISIBLE);
 		}
 	};

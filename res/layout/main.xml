@@ -33,43 +33,46 @@
 	<RelativeLayout
 		android:id="@+id/controls"
 		android:layout_width="fill_parent"
-		android:layout_height="fill_parent"
+		android:layout_height="60dp"
 		android:visibility="invisible"
+		android:background="#000"
 	>
-		<Button
-			android:id="@+id/exit"
+		<ImageView
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
+			android:layout_marginLeft="24dp"
+			android:layout_alignParentLeft="true"
+			android:layout_centerVertical="true"
+			android:src="@drawable/icon"
+		/>
+			
+		<Button
+			android:id="@+id/exit"
 			android:layout_alignParentRight="true"
-			android:layout_alignParentTop="true"
-			android:layout_marginRight="40dp"
-			android:layout_marginTop="40dp"
-			android:padding="20dp"
 			android:onClick="onExit"
-			android:text="Exit"
+			android:text="Return to files"
+			android:drawableLeft="@drawable/ic_menu_crop"
+			style="@style/HoloButton"
 		/>
 
 		<Button
 			android:id="@+id/crop"
-			android:layout_width="wrap_content"
-			android:layout_height="wrap_content"
-			android:layout_marginRight="8dp"
 			android:layout_toLeftOf="@id/exit"
-			android:layout_alignTop="@id/exit"
-			android:padding="20dp"
 			android:onClick="onCrop"
-			android:text="Crop"
+			android:text="Crop page"
+			android:drawableLeft="@drawable/ic_menu_crop"
+			style="@style/HoloButton"
 		/>
-			
-		<SeekBar
-			android:id="@+id/pageseek"
-			android:layout_width="fill_parent"
-			android:layout_height="wrap_content"
-			android:layout_alignParentBottom="true"
-			android:paddingLeft="40dp"
-			android:paddingRight="40dp"
-			android:paddingBottom="0dp"
-			android:progressDrawable="@drawable/seekbar"
-			android:thumb="@drawable/seek_handle" />
 	</RelativeLayout>
+		
+	<SeekBar
+		android:id="@+id/pageseek"
+		android:layout_width="fill_parent"
+		android:layout_height="wrap_content"
+		android:layout_alignParentBottom="true"
+		android:paddingLeft="40dp"
+		android:paddingRight="40dp"
+		android:paddingBottom="0dp"
+		android:progressDrawable="@drawable/seekbar"
+		android:thumb="@drawable/seek_handle" />
 </RelativeLayout>
