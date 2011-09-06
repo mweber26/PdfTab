@@ -28,6 +28,7 @@ public class PdfPage
 	private int pageNum;
 	private int cropLineTop, cropLineLeft, cropLineRight, cropLineBottom;
 	private int screenBorderSize = 0;
+	private TextSpanData spanData;
 
 	public PdfPage(Context context, PdfCore doc, int pageNum)
 	{
@@ -116,11 +117,13 @@ public class PdfPage
 	{
 		//long begin1 = System.currentTimeMillis();
 
+		spanData = new TextSpanData();
 		int size = screenPageWidth * screenPageHeight;
 		int[] pixelBuffer = doc.renderPage(
 			(int)(docPageWidth * screenScale), (int)(docPageHeight * screenScale),
 			(int)(cropLineLeft * screenScale), (int)(cropLineTop * screenScale),
-			screenPageWidth, screenPageHeight);
+			screenPageWidth, screenPageHeight,
+			spanData);
 
 		//long duration1 = System.currentTimeMillis() - begin1;
 		//long begin2 = System.currentTimeMillis();
@@ -206,6 +209,7 @@ public class PdfPage
 				destX+screenBorderSize+destW, destY+destH);
 
 			c.drawBitmap(screenBitmap, src, dest, (Paint)null);
+			spanData.draw(c, x + screenBorderSize, y);
 
 			if(screenBorderSize > 0)
 			{

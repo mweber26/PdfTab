@@ -261,7 +261,7 @@ public class PixmapView extends SurfaceView
 		public OverScroller getScroller() { return scroller; }
 		public int getCurrentPage() { return currentPage + 1; }
 
-		private PdfPageLayout getPage(int page)
+		private synchronized PdfPageLayout getPage(int page)
 		{
 			if(screenWidth <= 0 && screenHeight <= 0)
 				return null;
@@ -400,7 +400,7 @@ public class PixmapView extends SurfaceView
 			activity.showCurrentPage();
 		}
 
-		public void screenChanged()
+		public synchronized void screenChanged()
 		{
 			for(PdfPageLayout p : pages)
 			{

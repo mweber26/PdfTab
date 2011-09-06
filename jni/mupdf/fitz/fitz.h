@@ -18,6 +18,8 @@
 #include <float.h> /* FLT_EPSILON */
 #include <fcntl.h> /* O_RDONLY & co */
 
+void android_error(const char *msg);
+
 #define nelem(x) (sizeof(x)/sizeof((x)[0]))
 
 #define ABS(x) ( (x) < 0 ? -(x) : (x) )

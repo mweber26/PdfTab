@@ -25,6 +25,11 @@ fz_display_list *currentPageList;
 fz_rect currentMediabox;
 int currentRotate;
 
+void android_error(const char *msg)
+{
+	LOGE(msg);
+}
+
 JNIEXPORT int JNICALL Java_cam_pdftab_PdfCore_openFile(JNIEnv *env, jobject thiz, jstring jfilename)
 {
 	const char *filename;
@@ -173,7 +178,8 @@ JNIEXPORT jint JNICALL Java_cam_pdftab_PdfCore_findLink(JNIEnv *env, jobject thi
 }
 
 JNIEXPORT jboolean JNICALL Java_cam_pdftab_PdfCore_drawPage(JNIEnv *env, jobject thiz,
-	jintArray buf, int pageW, int pageH, int patchX, int patchY, int patchW, int patchH)
+	jintArray buf, int pageW, int pageH, int patchX, int patchY, int patchW, int patchH,
+	jobject text_data)
 {
 	int ret;
 	fz_error error;
@@ -185,12 +191,21 @@ JNIEXPORT jboolean JNICALL Java_cam_pdftab_PdfCore_drawPage(JNIEnv *env, jobject
 	float xscale, yscale;
 	fz_bbox rect;
 	jint *pixels;
-	fz_text_span *text_span;
+	fz_text_span *text_span, *span;
+	jobjectArray boundArray;
+	jclass text_class = (*env)->GetObjectClass(env, text_data);
+	jmethodID text_set_string, text_add_rect;
+	char *text_content, *ptr;
+	int text_len = 0, i;
+
 	clock_t end, start = clock();
 
 	//call mupdf to render display list to screen
 	LOGE("Rendering page=%dx%d patch=[%d,%d,%d,%d]", pageW, pageH, patchX, patchY, patchW, patchH);
 	pixels = (*env)->GetPrimitiveArrayCritical(env, buf, 0);
+
+	text_set_string = (*env)->GetMethodID(env, text_class, "setString", "(Ljava/lang/String;)V");
+	text_add_rect = (*env)->GetMethodID(env, text_class, "addRect", "(IIII)V");
 
 	rect.x0 = patchX;
 	rect.y0 = patchY;
@@ -223,11 +238,51 @@ JNIEXPORT jboolean JNICALL Java_cam_pdftab_PdfCore_drawPage(JNIEnv *env, jobject
 	fz_drop_pixmap(pix);
 
 	//compute the text spans for the page
-	//text_span = fz_new_text_span();
-	//dev = fz_new_text_device(text_span);
-	//fz_execute_display_list(currentPageList, dev, ctm, bbox);
-	//fz_free_device(dev);
-	//fz_free_text_span(text_span);
+	LOGE("Compute text span");
+	text_span = fz_new_text_span();
+	dev = fz_new_text_device(text_span);
+	fz_execute_display_list(currentPageList, dev, ctm, bbox);
+	fz_free_device(dev);
+
+	//how much text
+    text_len = 0;
+    for(span = text_span; span; span = span->next)
+        text_len += span->len + 1; //1 for line separators
+
+	//allocate text
+	text_content = malloc(text_len + 1);
+    if(!text_content) return 0;
+
+	ptr = text_content;
+	for(span = text_span; span; span = span->next)
+	{
+		for(i = 0; i < span->len; i++)
+		{
+			*ptr = span->text[i].c;
+			if(*ptr < 32)
+				*ptr = '?';
+			ptr++;
+
+			(*env)->CallVoidMethod(env, text_data, text_add_rect,
+				span->text[i].bbox.x0 - patchX, span->text[i].bbox.y0 - patchY,
+				span->text[i].bbox.x1 - patchX, span->text[i].bbox.y1 - patchY);
+		}
+
+		if(!span->eol && span->next)
+			continue;
+
+		*ptr = '\n';
+		ptr++;
+
+		(*env)->CallVoidMethod(env, text_data, text_add_rect, -1, -1, -1, -1);
+	}
+	*ptr = 0x00;
+
+	//make the java string
+	(*env)->CallVoidMethod(env, text_data, text_set_string, (*env)->NewStringUTF(env, text_content));
+
+	free(text_content);
+	fz_free_text_span(text_span);
 
 	(*env)->ReleasePrimitiveArrayCritical(env, buf, pixels, 0);
 	end = clock();

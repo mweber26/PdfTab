@@ -76,7 +76,8 @@ public class CropActivity extends Activity
 
 	private void renderPage()
 	{
-		pagePixels = core.renderPage(pageW, pageH, 0, 0, pageW, pageH);
+		TextSpanData spanData = new TextSpanData();
+		pagePixels = core.renderPage(pageW, pageH, 0, 0, pageW, pageH, spanData);
 	}
 
 	public void onSave(View view)

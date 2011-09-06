@@ -18,7 +18,8 @@ public class PdfCore
 	private static native void drawPage(int[] pixels,
 		int pageW, int pageH,
 		int patchX, int patchY,
-		int patchW, int patchH);
+		int patchW, int patchH,
+		TextSpanData spanData);
 	public static native int findLink(int pageNum,
 		int pageW, int pageH,
 		int patchX, int patchY,
@@ -38,10 +39,11 @@ public class PdfCore
 	public static int[] renderPage(
 		int pageW, int pageH,
 		int patchX, int patchY,
-		int patchW, int patchH)
+		int patchW, int patchH,
+		TextSpanData spanData)
 	{
 		int[] ret = new int[patchW * patchH];
-		drawPage(ret, pageW, pageH, patchX, patchY, patchW, patchH);
+		drawPage(ret, pageW, pageH, patchX, patchY, patchW, patchH, spanData);
 		return ret;
 	}
 

@@ -6,7 +6,7 @@ fz_malloc(int size)
 	void *p = malloc(size);
 	if (!p)
 	{
-		fprintf(stderr, "fatal error: out of memory\n");
+		android_error("fatal error: out of memory\n");
 		abort();
 	}
 	return p;
@@ -22,14 +22,14 @@ fz_calloc(int count, int size)
 
 	if (count < 0 || size < 0 || count > INT_MAX / size)
 	{
-		fprintf(stderr, "fatal error: out of memory (integer overflow)\n");
+		android_error("fatal error: out of memory (integer overflow)\n");
 		abort();
 	}
 
 	p = malloc(count * size);
 	if (!p)
 	{
-		fprintf(stderr, "fatal error: out of memory\n");
+		android_error("fatal error: out of memory\n");
 		abort();
 	}
 	return p;
@@ -48,14 +48,14 @@ fz_realloc(void *p, int count, int size)
 
 	if (count < 0 || size < 0 || count > INT_MAX / size)
 	{
-		fprintf(stderr, "fatal error: out of memory (integer overflow)\n");
+		android_error("fatal error: out of memory (integer overflow)\n");
 		abort();
 	}
 
 	np = realloc(p, count * size);
 	if (np == NULL)
 	{
-		fprintf(stderr, "fatal error: out of memory\n");
+		android_error("fatal error: out of memory\n");
 		abort();
 	}
 	return np;
@@ -64,7 +64,8 @@ fz_realloc(void *p, int count, int size)
 void
 fz_free(void *p)
 {
-	free(p);
+	if(p)
+		free(p);
 }
 
 char *
